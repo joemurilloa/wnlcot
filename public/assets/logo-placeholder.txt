@@ -1,0 +1,11 @@
+/* Placeholder for WNL FLOORING logo */
+/* Replace this file with the actual company logo */
+
+Logo dimensions: Recommended 200x100px or similar aspect ratio
+Formats supported: PNG, JPG, SVG
+Location: /public/assets/wnl-logo.png
+
+To use the logo in the application:
+1. Replace this file with the actual logo
+2. Update the file name in the components if different
+3. Ensure the logo has a transparent background for best results
