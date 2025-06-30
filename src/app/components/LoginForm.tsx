@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Lock, User } from 'lucide-react';
+import Image from 'next/image';
 import COMPANY_INFO from '../config/company';
 
 interface LoginFormProps {
@@ -29,8 +30,18 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-blue-700 px-4">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className="mx-auto h-20 w-20 bg-white rounded-full flex items-center justify-center mb-6">
-            <span className="text-2xl font-bold text-blue-900">WNL</span>
+          <div className="mx-auto h-24 w-24 bg-white rounded-full flex items-center justify-center mb-6 p-2">
+            <Image 
+              src="/assets/wnl-logo.png" 
+              alt="WNL Flooring Logo" 
+              width={80}
+              height={80}
+              className="object-contain"
+              onError={() => {
+                // Fallback handled by Next.js
+                console.log('Logo failed to load');
+              }}
+            />
           </div>
           <h2 className="text-3xl font-bold text-white">{COMPANY_INFO.name}</h2>
           <p className="mt-2 text-blue-100">Quote Generator</p>

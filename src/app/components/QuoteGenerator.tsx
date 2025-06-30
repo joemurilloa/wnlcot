@@ -30,7 +30,10 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [newItem, setNewItem] = useState({ description: '', quantity: 1, price: 0 });
   
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<QuoteForm>();
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<QuoteForm>();
+
+  // Watch the project description to update character count
+  const watchedProjectDescription = watch('projectDescription', '');
 
   // Helper function to format numbers with commas
   const formatCurrency = (amount: number): string => {
@@ -61,35 +64,116 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
     return items.reduce((total, item) => total + (item.quantity * item.price), 0);
   };
 
-  const generatePDF = (data: QuoteForm) => {
+  const generatePDF = async (data: QuoteForm) => {
     const pdf = new jsPDF();
     const pageWidth = pdf.internal.pageSize.width;
+    const pageHeight = pdf.internal.pageSize.height;
     const margin = 20;
     let yPosition = 20;
 
-    // HEADER: reduce height for more space
-    pdf.setFillColor(21, 37, 52); // RGB(21, 37, 52) - Custom dark color
-    pdf.rect(0, 0, pageWidth, 32, 'F'); // reduced from 45 to 32
+    // Function to convert image to base64
+    const getBase64FromUrl = async (url: string): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx?.drawImage(img, 0, 0);
+          const dataURL = canvas.toDataURL('image/png');
+          resolve(dataURL);
+        };
+        img.onerror = () => reject(new Error('Could not load image'));
+        img.src = url;
+      });
+    };
 
-    // Logo: slightly smaller and lower for compactness
+    // Load logo
+    let logoBase64 = '';
     try {
-      pdf.addImage('/assets/wnl-logo.png', 'PNG', margin, 10, 29, 20); // smaller logo
-    } catch {}
-    const headerTextLeft = margin + 32;
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(18); // smaller
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(COMPANY_INFO.name, headerTextLeft, 14);
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(COMPANY_INFO.tagline, headerTextLeft, 20);
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'italic');
-    pdf.text('The difference is in the details', headerTextLeft, 24);
-    pdf.setFontSize(7);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text('Email: wnlflooring@gmail.com  Phone: (786) 762-6304', headerTextLeft, 28);
-    yPosition = 38; // start content lower
+      logoBase64 = await getBase64FromUrl('/assets/wnl-logo.png');
+    } catch {
+      console.log('Could not load logo, using text fallback');
+    }
+
+    // Function to check if we need a new page
+    const checkPageBreak = (requiredSpace: number) => {
+      if (yPosition + requiredSpace > pageHeight - 40) { // Leave space for footer
+        addNewPage();
+        return true;
+      }
+      return false;
+    };
+
+    // Function to add a new page without header (only for continuation pages)
+    const addNewPage = () => {
+      pdf.addPage();
+      yPosition = 30; // Start content without page number
+    };
+
+    // Function to add header to each page
+    const addHeader = () => {
+      // HEADER: reduce height for more space
+      pdf.setFillColor(21, 37, 52); // RGB(21, 37, 52) - Custom dark color
+      pdf.rect(0, 0, pageWidth, 32, 'F'); // reduced from 45 to 32
+
+      // Add logo if available, otherwise use text
+      if (logoBase64) {
+        try {
+          pdf.addImage(logoBase64, 'PNG', margin,  4, 32, 25);
+        } catch {
+          // Fallback to text logo
+          addTextLogo();
+        }
+      } else {
+        // Fallback to text logo
+        addTextLogo();
+      }
+
+      function addTextLogo() {
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(16);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('WNL', margin + 8, 18);
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text('FLOORING', margin + 5, 22);
+      }
+
+      const headerTextLeft = margin + 40;
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(18); // smaller
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(COMPANY_INFO.name, headerTextLeft, 14);
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(COMPANY_INFO.tagline, headerTextLeft, 20);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'italic');
+      pdf.text('The difference is in the details', headerTextLeft, 24);
+      pdf.setFontSize(7);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Email: wnlflooring@gmail.com  Phone: (786) 762-6304  Web: wnlflooring.com', headerTextLeft, 28);
+      yPosition = 38; // start content lower
+    };
+
+    // Function to add footer
+    const addFooter = () => {
+      const footerY = pageHeight - 20;
+      pdf.setFillColor(21, 37, 52);
+      pdf.rect(0, footerY, pageWidth, 20, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Thank you for considering ${COMPANY_INFO.name} for your project.`, pageWidth/2, footerY + 8, { align: 'center' });
+      pdf.setFontSize(8);
+      pdf.text('Professional Installation • Quality Materials • Satisfaction Guaranteed', pageWidth/2, footerY + 15, { align: 'center' });
+    };
+
+    // Add initial header
+    addHeader();
     
     // Quote title - clean without shadow
     pdf.setTextColor(0, 0, 0);
@@ -110,6 +194,7 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
     yPosition += 25;
     
     // Client information section
+    checkPageBreak(40);
     pdf.setFillColor(250, 250, 250); // Very light gray
     pdf.rect(margin - 3, yPosition - 3, pageWidth - 2 * margin + 6, 32, 'F');
     pdf.setDrawColor(0, 0, 0); // Black border
@@ -152,30 +237,50 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
     
     yPosition += Math.max(7, addressText.length * 4) + 15;
     
-    // Project description with dynamic height calculation
-    pdf.setFillColor(250, 250, 250);
+    // Project description with improved page flow
+    const projectLines = pdf.splitTextToSize(data.projectDescription, pageWidth - 2 * margin);
     
-    // Calculate the actual text lines after splitting for width
-    const projectLines = pdf.splitTextToSize(data.projectDescription, pageWidth - 2 * margin - 6);
-    const projectHeight = Math.max(25, projectLines.length * 4 + 15); // Dynamic height based on actual lines
-    
-    pdf.rect(margin - 3, yPosition - 3, pageWidth - 2 * margin + 6, projectHeight, 'F');
-    pdf.setDrawColor(0, 0, 0);
-    pdf.rect(margin - 3, yPosition - 3, pageWidth - 2 * margin + 6, projectHeight);
-    
+    // Start project description section (no background box)
     pdf.setTextColor(0, 0, 0);
     pdf.setFontSize(12);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('PROJECT DESCRIPTION', margin, yPosition + 5);
+    pdf.text('PROJECT DESCRIPTION', margin, yPosition);
     
     yPosition += 10;
+    
+    // Add project description text with page breaks if needed
     pdf.setTextColor(0, 0, 0);
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
-    pdf.text(projectLines, margin, yPosition);
-    yPosition += projectLines.length * 4 + 12;
+    
+    let currentLineIndex = 0;  
+    while (currentLineIndex < projectLines.length) {
+      const remainingLines = projectLines.slice(currentLineIndex);
+      const availableSpace = pageHeight - yPosition - 80; // Leave space for footer
+      const linesPerPage = Math.floor(availableSpace / 4);
+      
+      if (linesPerPage <= 0 || (remainingLines.length > linesPerPage && currentLineIndex > 0)) {
+        // Need new page
+        addNewPage();
+        currentLineIndex = Math.max(0, currentLineIndex);
+      }
+      
+      const linesToAdd = Math.min(remainingLines.length, Math.max(1, Math.floor((pageHeight - yPosition - 80) / 4)));
+      const textToAdd = remainingLines.slice(0, linesToAdd);
+      
+      pdf.text(textToAdd, margin, yPosition);
+      yPosition += textToAdd.length * 4;
+      currentLineIndex += linesToAdd;
+      
+      if (currentLineIndex < projectLines.length) {
+        yPosition += 5; // Add minimal spacing before next page
+      }
+    }
+    
+    yPosition += 12;
     
     // Items and pricing section
+    checkPageBreak(25);
     pdf.setTextColor(0, 0, 0);
     pdf.setFontSize(12);
     pdf.setFont('helvetica', 'bold');
@@ -183,39 +288,71 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
     
     yPosition += 12;
     
-    // Professional table header
-    pdf.setFillColor(21, 37, 52); // Custom dark color header
-    pdf.rect(margin - 3, yPosition - 3, pageWidth - 2 * margin + 6, 10, 'F');
+    // Function to add table header
+    const addTableHeader = () => {
+      pdf.setFillColor(21, 37, 52); // Custom dark color header
+      pdf.rect(margin - 3, yPosition - 3, pageWidth - 2 * margin + 6, 10, 'F');
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('DESCRIPTION', margin, yPosition + 3);
+      pdf.text('QTY', pageWidth - 110, yPosition + 3);
+      pdf.text('UNIT PRICE', pageWidth - 80, yPosition + 3);
+      pdf.text('AMOUNT', pageWidth - 35, yPosition + 3);
+      
+      yPosition += 12;
+    };
+
+    // Add initial table header
+    addTableHeader();
     
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('DESCRIPTION', margin, yPosition + 3);
-    pdf.text('QTY', pageWidth - 110, yPosition + 3);
-    pdf.text('UNIT PRICE', pageWidth - 80, yPosition + 3);
-    pdf.text('AMOUNT', pageWidth - 35, yPosition + 3);
-    
-    yPosition += 12;
-    
-    // Table rows with clean styling
+    // Table rows with clean styling and page breaks
     pdf.setTextColor(0, 0, 0);
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
     
-    items.forEach((item, index) => {
+    items.forEach((item: QuoteItem, index: number) => {
+      // Check if we need a new page for this item
+      if (checkPageBreak(12)) {
+        // Add table header on new page
+        addTableHeader();
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+      }
+      
       if (index % 2 === 0) {
         pdf.setFillColor(248, 249, 250);
         pdf.rect(margin - 3, yPosition - 2, pageWidth - 2 * margin + 6, 8, 'F');
       }
       
-      pdf.text(item.description, margin, yPosition + 2);
+      // Split long descriptions if needed
+      const descLines = pdf.splitTextToSize(item.description, pageWidth - 150);
+      const itemHeight = Math.max(8, descLines.length * 4);
+      
+      // Check if this item needs more space
+      if (checkPageBreak(itemHeight + 2)) {
+        addTableHeader();
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        
+        if (index % 2 === 0) {
+          pdf.setFillColor(248, 249, 250);
+          pdf.rect(margin - 3, yPosition - 2, pageWidth - 2 * margin + 6, itemHeight, 'F');
+        }
+      }
+      
+      pdf.text(descLines, margin, yPosition + 2);
       pdf.text(item.quantity.toString(), pageWidth - 110, yPosition + 2);
       pdf.text(formatCurrency(item.price), pageWidth - 80, yPosition + 2);
       pdf.text(formatCurrency(item.quantity * item.price), pageWidth - 35, yPosition + 2);
-      yPosition += 10;
+      yPosition += itemHeight + 2;
     });
     
     // Professional total section
+    checkPageBreak(30);
     pdf.setDrawColor(0, 0, 0);
     pdf.setLineWidth(1);
     pdf.line(pageWidth - 100, yPosition, pageWidth - 5, yPosition);
@@ -234,6 +371,7 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
     yPosition += 20;
     
     // Terms and conditions
+    checkPageBreak(70);
     pdf.setFillColor(250, 250, 250);
     pdf.rect(margin - 3, yPosition - 3, pageWidth - 2 * margin + 6, 45, 'F');
     pdf.setDrawColor(0, 0, 0);
@@ -256,47 +394,46 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
       '4. Payment Schedule:',
       '   • A 30% deposit is required prior to start of the project',
       '   • A 40% progress payment will be due once the project is halfway completed',
-      '   • The remaining 30% is due upon project completion and final approvall'
+      '   • The remaining 30% is due upon project completion and final approval'
     ];
     
     terms.forEach(term => {
       const termLines = pdf.splitTextToSize(term, pageWidth - 2 * margin - 6);
+      if (checkPageBreak(termLines.length * 3.5 + 2)) {
+        // Continue terms on new page
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+      }
       pdf.text(termLines, margin, yPosition);
       yPosition += termLines.length * 3.5 + 1;
     });
     
-    yPosition += 18; // less space after terms
+    yPosition += 18;
 
-    // Firmas minimalistas bien separadas
+    // Signatures
+    checkPageBreak(30);
     pdf.setDrawColor(0, 0, 0);
     pdf.setLineWidth(0.8);
-    const lineWidth = 70; // slightly shorter
-    const gap = 40; // closer together
+    const lineWidth = 70;
+    const gap = 40;
     const centerX = pageWidth / 2;
-    // Línea izquierda (Client)
+    // Left line (Client)
     const leftLineX1 = centerX - gap/2 - lineWidth;
     const leftLineX2 = centerX - gap/2;
     pdf.line(leftLineX1, yPosition, leftLineX2, yPosition);
-    // Línea derecha (WNL FLOORING)
+    // Right line (WNL FLOORING)
     const rightLineX1 = centerX + gap/2;
     const rightLineX2 = centerX + gap/2 + lineWidth;
     pdf.line(rightLineX1, yPosition, rightLineX2, yPosition);
-    // Etiquetas centradas debajo de cada línea
+    // Labels centered below each line
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(10);
     pdf.text('Client', (leftLineX1 + leftLineX2) / 2, yPosition + 7, { align: 'center' });
     pdf.text('WNL FLOORING', (rightLineX1 + rightLineX2) / 2, yPosition + 7, { align: 'center' });
-    yPosition += 22;
-
-    // FOOTER: make band smaller and text centered
-    pdf.setFillColor(21, 37, 52);
-    pdf.rect(0, yPosition, pageWidth, 15, 'F'); // reduced from 20 to 15
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(`Thank you for considering ${COMPANY_INFO.name} for your project.`, pageWidth/2, yPosition + 6, { align: 'center' });
-    pdf.setFontSize(8);
-    pdf.text('Professional Installation • Quality Materials • Satisfaction Guaranteed', pageWidth/2, yPosition + 12, { align: 'center' });
+    
+    // Add footer only to the last page
+    addFooter();
     
     // Create blob and download properly to avoid security warnings
     const pdfBlob = pdf.output('blob');
@@ -310,12 +447,12 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
     URL.revokeObjectURL(url);
   };
 
-  const onSubmit = (data: QuoteForm) => {
+  const onSubmit = async (data: QuoteForm) => {
     if (items.length === 0) {
       alert('Please add at least one item to the quote.');
       return;
     }
-    generatePDF({ ...data, items });
+    await generatePDF({ ...data, items });
     reset();
     setItems([]);
   };
@@ -422,14 +559,28 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
           <div className="bg-white p-6 rounded-lg shadow">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Project Description</h2>
             <textarea
-              {...register('projectDescription', { required: 'Project description is required' })}
-              rows={4}
+              {...register('projectDescription', { 
+                required: 'Project description is required',
+                maxLength: {
+                  value: 10000,
+                  message: 'Project description cannot exceed 10,000 characters'
+                }
+              })}
+              rows={8}
+              maxLength={10000}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-              placeholder="Describe the tile and bathroom remodeling project..."
+              placeholder="Describe the tile and bathroom remodeling project... (Max 10,000 characters)"
             />
-            {errors.projectDescription && (
-              <p className="text-red-500 text-sm mt-1">{errors.projectDescription.message}</p>
-            )}
+            <div className="flex justify-between items-center mt-1">
+              <div>
+                {errors.projectDescription && (
+                  <p className="text-red-500 text-sm">{errors.projectDescription.message}</p>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
+                {watchedProjectDescription?.length || 0}/10,000 characters
+              </p>
+            </div>
           </div>
 
           {/* Items */}
@@ -445,9 +596,13 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
                     type="text"
                     value={newItem.description}
                     onChange={(e) => setNewItem({...newItem, description: e.target.value})}
+                    maxLength={200}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                    placeholder="Item description"
+                    placeholder="Item description (Max 200 characters)"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {newItem.description.length}/200 characters
+                  </p>
                 </div>
                 <div>
                   <input
@@ -465,7 +620,7 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
                     type="number"
                     min={0}
                     step="0.01"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                     value={newItem.price}
                     placeholder="Price"
                     onFocus={e => { if (e.target.value === '0') e.target.value = ''; }}
@@ -474,7 +629,7 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
                   <button
                     type="button"
                     onClick={addItem}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex-shrink-0"
                   >
                     <Plus className="h-4 w-4" />
                   </button>
