@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { LogOut, Plus, Trash2, Download } from 'lucide-react';
+import Image from 'next/image';
 import jsPDF from 'jspdf';
 import COMPANY_INFO from '../config/company';
 
@@ -74,7 +75,7 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
     // Function to convert image to base64
     const getBase64FromUrl = async (url: string): Promise<string> => {
       return new Promise((resolve, reject) => {
-        const img = new Image();
+        const img = new window.Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
           const canvas = document.createElement('canvas');
@@ -122,7 +123,7 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
       // Add logo if available, otherwise use text
       if (logoBase64) {
         try {
-          pdf.addImage(logoBase64, 'PNG', margin,  4, 32, 25);
+          pdf.addImage(logoBase64, 'PNG', margin, 4, 32, 25);
         } catch {
           // Fallback to text logo
           addTextLogo();
@@ -464,8 +465,17 @@ export default function QuoteGenerator({ onLogout }: QuoteGeneratorProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
-              <div className="h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center mr-3">
-                <span className="text-white font-bold">WNL</span>
+              <div className="h-12 w-12 bg-white rounded-full flex items-center justify-center mr-3 p-1">
+                <Image 
+                  src="/assets/wnl-logo.png" 
+                  alt="WNL Flooring Logo" 
+                  width={40}
+                  height={40}
+                  className="object-contain"
+                  onError={() => {
+                    console.log('Logo failed to load in header');
+                  }}
+                />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">{COMPANY_INFO.name}</h1>
